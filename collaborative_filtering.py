@@ -1,4 +1,5 @@
 import implicit
+import pandas as pd
 from scipy import sparse
 
 class CollaborativeFiltering:
@@ -28,7 +29,7 @@ class CollaborativeFiltering:
         self.model.fit(train_matrix.T)
         print("Model training complete.")
 
-    def recommend(self, user_id, test_matrix, reverse_product_map, N=10):
+    def recommend(self, user_id, test_matrix, reverse_product_map, orders_df, N=10):
         """
         Generate product recommendations for a specified user.
 
@@ -36,32 +37,38 @@ class CollaborativeFiltering:
         - user_id (int): The ID of the user for whom to generate recommendations.
         - test_matrix (csr_matrix): Sparse matrix for test data (item-user format).
         - reverse_product_map (dict): Dictionary mapping product indices to original product IDs.
+        - orders_df (DataFrame): DataFrame containing user_id and corresponding user_idx mappings.
         - N (int): Number of recommendations to generate.
 
         Returns:
-        - recommended_product_ids (list): List of recommended product IDs.
+        - recommended_products_df (DataFrame): DataFrame with columns 'product_id' and 'score'.
         """
-        # Transpose the test_matrix to get user-item format
-        test_matrix_user_item = test_matrix.T
+        # Step 1: Get the user index (user_idx) from user_id
+        try:
+            user_idx = orders_df.loc[orders_df['user_id'] == user_id, 'user_idx'].values[0]
+        except IndexError:
+            print(f"User ID {user_id} not found in orders_df.")
+            return pd.DataFrame(columns=['product_id', 'score'])
 
-        # Get the user's interaction history
-        user_interactions = test_matrix_user_item[user_id]
-        
-        # Check if the user has any interactions
+        # Step 2: Retrieve the user's interaction row and convert to CSR format
+        user_interactions = sparse.csr_matrix(test_matrix[user_idx])
+
+        # Step 3: Check if the user has any interactions
         if user_interactions.nnz == 0:
             print(f"No interactions found for user {user_id}.")
-            return []
+            return pd.DataFrame(columns=['product_id', 'score'])
 
-        # Convert user interactions to csr format (for ALS model)
-        user_interactions_csr = sparse.csr_matrix(user_interactions)
+        # Step 4: Generate recommendations for the user using model.recommend
+        recommended_products, scores = self.model.recommend(user_idx, user_interactions, N=N)
 
-        # Generate recommendations for the user
-        recommended_products, _ = self.model.recommend(user_id, user_interactions_csr, N=N)
+        # Step 5: Map recommended product indices to original product IDs and scores
+        recommendations = [
+            {'product_id': reverse_product_map.get(idx), 'score': score}
+            for idx, score in zip(recommended_products, scores)
+            if reverse_product_map.get(idx) is not None
+        ]
+
+        # Step 6: Convert the list of recommendations to a DataFrame
+        recommended_products_df = pd.DataFrame(recommendations)
         
-        # Map recommended product indices to original product IDs
-        recommended_product_ids = [reverse_product_map.get(idx, None) for idx in recommended_products]
-        
-        # Filter out None values (in case some indices were missing in the map)
-        recommended_product_ids = [pid for pid in recommended_product_ids if pid is not None]
-        
-        return recommended_product_ids
+        return recommended_products_df
