@@ -113,3 +113,71 @@ combined_recommendations = cf.recommend(user_id, product_id, test_matrix, revers
 
 print("Combined Recommendations:", combined_recommendations)
 ```
+
+## ContentBasedFiltering Class
+
+The `ContentBasedFiltering` class in `content_based_filtering.py` uses Alternating Least Squares (ALS) to generate product-based recommendations. This model suggests similar items based on product features and user interactions, ideal for content-based filtering scenarios.
+
+### Class and Method Descriptions
+
+#### `__init__(self, factors=2000, regularization=0.1, iterations=20)`
+Initializes the ALS model with configurable parameters:
+- **factors**: Number of latent factors for model (default: 2000).
+- **regularization**: Regularization parameter to prevent overfitting (default: 0.1).
+- **iterations**: Number of ALS iterations for model training (default: 20).
+
+#### `train_test_split(self, interaction_df: pl.DataFrame, train_size=0.75, random_state=None) -> Tuple[sparse.csr_matrix, sparse.csr_matrix]`
+Splits a `polars.DataFrame` of interactions into training and testing matrices:
+- **interaction_df**: DataFrame with columns `user_idx`, `product_idx`, and `interaction`.
+- **train_size**: Proportion of data for training (default: 0.75).
+- **random_state**: Seed for reproducibility.
+
+Returns:
+- **train_matrix** and **test_matrix** as sparse matrices.
+
+#### `train(self, interaction_input: Union[sparse.csr_matrix, pl.DataFrame], is_csr=True, train_size=0.75, random_state=None) -> Union[None, Tuple[sparse.csr_matrix, sparse.csr_matrix]]`
+Trains the ALS model using either a precomputed CSR matrix or an interaction DataFrame:
+- **interaction_input**: CSR matrix or DataFrame containing interaction data.
+- **is_csr**: Boolean flag indicating if the input is already a CSR matrix (default: True).
+- **train_size**: Ratio for train-test split if using a DataFrame.
+
+Returns:
+- **train_matrix** and **test_matrix** if a DataFrame is provided, otherwise `None`.
+
+#### `product_recommend(self, product_id, reverse_product_map, product_id_to_idx, n_similar=10)`
+Finds products similar to a given product ID:
+- **product_id**: ID of the product to find similar items for.
+- **reverse_product_map**: Dictionary mapping product indices to product IDs.
+- **product_id_to_idx**: Dictionary mapping product IDs to product indices.
+- **n_similar**: Number of similar products to retrieve (default: 10).
+
+Returns:
+- A list of dictionaries with `product_id` and `similarity_score` for each similar product.
+
+---
+
+### Example Usage
+
+```python
+import polars as pl
+from content_based_filtering import ContentBasedFiltering
+
+# Load interaction data into a polars DataFrame
+interaction_df = pl.read_csv('/path/to/interactions.csv')
+
+# Initialize the ContentBasedFiltering model
+cbf = ContentBasedFiltering(factors=100, regularization=0.1, iterations=15)
+
+# Train the model
+train_matrix, test_matrix = cbf.train(interaction_input=interaction_df, is_csr=False, train_size=0.8)
+
+# Define reverse mapping for products
+reverse_product_map = {row['product_idx']: row['product_id'] for row in interaction_df.select(['product_id', 'product_idx']).to_dicts()}
+product_id_to_idx = {v: k for k, v in reverse_product_map.items()}
+
+# Get similar products for a specific product ID
+product_id = 123  # Example product ID
+similar_products = cbf.product_recommend(product_id, reverse_product_map, product_id_to_idx, n_similar=5)
+
+print("Similar products to product_id", product_id, ":", similar_products)
+```
