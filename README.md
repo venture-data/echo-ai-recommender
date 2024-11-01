@@ -2,9 +2,9 @@
 
 ## CollaborativeFiltering Class
 
-This class, found in `collaborative_filtering.py`, implements collaborative filtering using Alternating Least Squares (ALS) with `implicit`. It provides methods for splitting interaction data, training the model, and generating recommendations.
+The `CollaborativeFiltering` class, located in `collaborative_filtering.py`, implements collaborative filtering using Alternating Least Squares (ALS) with `implicit`. It provides methods for splitting interaction data, training the model, and generating both user and product recommendations, including a combined recommendation method that intersects the results from user- and product-based recommendations.
 
-#### Class and Method Descriptions
+### Class and Method Descriptions
 
 #### `__init__(self, factors=2000, regularization=0.1, iterations=20)`
 Initializes the ALS model with configurable parameters:
@@ -13,7 +13,7 @@ Initializes the ALS model with configurable parameters:
 - **iterations**: Number of ALS iterations for model training (default: 20).
 
 #### `_validate_train_size(train_size: float) -> None`
-Static method that checks if `train_size` is a float between 0 and 1. Used to validate input for train-test split ratio.
+Ensures `train_size` is a float between 0 and 1 to validate input for train-test split ratio.
 
 #### `_get_stratified_tr_mask(user_idx, product_idx, train_size, random_state)`
 Creates a stratified mask for train-test splitting, ensuring each user and item appears in the training set:
@@ -62,6 +62,30 @@ Generates product recommendations for a given user:
 Returns:
 - A list of top `N` recommended products, each with `product_id` and `score`.
 
+#### `product_recommend(self, product_id, reverse_product_map, product_id_to_idx, n_similar=10)`
+Finds products similar to the given product ID:
+- **product_id**: ID of the product to find similar items for.
+- **reverse_product_map**: Dictionary mapping product indices to product IDs.
+- **product_id_to_idx**: Dictionary mapping product IDs to product indices.
+- **n_similar**: Number of similar products to retrieve (default: 10).
+
+Returns:
+- A list of dictionaries with `product_id` and `similarity_score` for each similar product.
+
+#### `recommend(self, user_id, product_id, test_matrix, reverse_product_map, user_idx_dict, product_id_to_idx, N=10, n_similar=10)`
+Combines recommendations from user and product similarity, returning the intersection of both:
+- **user_id**: ID of the user to get recommendations for.
+- **product_id**: ID of the product to find similar items for.
+- **test_matrix**: Sparse matrix in item-user format.
+- **reverse_product_map**: Dictionary mapping product indices to product IDs.
+- **user_idx_dict**: Dictionary mapping user IDs to indices.
+- **product_id_to_idx**: Dictionary mapping product IDs to product indices.
+- **N**: Number of user recommendations to retrieve (default: 10).
+- **n_similar**: Number of similar products to retrieve (default: 10).
+
+Returns:
+- A list of product recommendations that appear in both user and product similarity results.
+
 ### Example Usage
 
 ```python
@@ -80,11 +104,12 @@ train_matrix, test_matrix = cf.train(interaction_input=interaction_df, is_csr=Fa
 # Create mappings for user indices and product indices
 user_idx_dict = {row['user_id']: row['user_idx'] for row in interaction_df.select(['user_id', 'user_idx']).to_dicts()}
 reverse_product_map = {row['product_idx']: row['product_id'] for row in interaction_df.select(['product_id', 'product_idx']).to_dicts()}
+product_id_to_idx = {v: k for k, v in reverse_product_map.items()}
 
-# Generate recommendations for a specific user
+# Generate combined recommendations for a specific user and product
 user_id = 1  # Example user ID
-recommendations = cf.user_recommend(user_id, test_matrix, reverse_product_map, user_idx_dict, N=5)
+product_id = 123  # Example product ID
+combined_recommendations = cf.recommend(user_id, product_id, test_matrix, reverse_product_map, user_idx_dict, product_id_to_idx, N=5)
 
-print("Recommendations for user", user_id, ":", recommendations)
+print("Combined Recommendations:", combined_recommendations)
 ```
-
