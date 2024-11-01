@@ -1,7 +1,7 @@
 import implicit
 from scipy import sparse
 import numpy as np
-from typing import Optional, Tuple, Union, Dict, List
+from typing import Optional, Tuple, Union
 from sklearn.utils import check_random_state
 import polars as pl
 
