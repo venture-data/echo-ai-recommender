@@ -5,7 +5,7 @@ from typing import Optional, Tuple, Union
 from sklearn.utils import check_random_state
 import polars as pl
 
-class ContentbBasedFiltering:
+class ContentBasedFiltering:
     def __init__(self, factors: int = 2000, regularization: float = 0.1, iterations: int = 20):
         """
         Initialize the Content Based Filtering model with ALS.
@@ -23,7 +23,7 @@ class ContentbBasedFiltering:
 
     @staticmethod
     def _get_stratified_tr_mask(user_idx, product_idx, train_size, random_state):
-        ContentbBasedFiltering._validate_train_size(train_size)
+        ContentBasedFiltering._validate_train_size(train_size)
         random_state = check_random_state(random_state)
         n_interactions = user_idx.shape[0]
 
