@@ -9,11 +9,6 @@ class CollaborativeFiltering:
     def __init__(self, factors: int = 2000, regularization: float = 0.1, iterations: int = 20):
         """
         Initialize the Collaborative Filtering model with ALS.
-
-        Parameters:
-        - factors (int): The number of latent factors to use.
-        - regularization (float): Regularization parameter to avoid overfitting.
-        - iterations (int): Number of ALS iterations to run.
         """
         self.model = implicit.als.AlternatingLeastSquares(
             factors=factors,
@@ -32,10 +27,8 @@ class CollaborativeFiltering:
         random_state = check_random_state(random_state)
         n_interactions = user_idx.shape[0]
 
-        # Create a random mask for training data
         train_mask = random_state.rand(n_interactions) <= train_size
 
-        # Ensure at least one of each user and product is in the training set
         for array in (user_idx, product_idx):
             present = array[train_mask]
             missing = np.unique(array[~train_mask][~np.isin(array[~train_mask], present)])
@@ -71,7 +64,6 @@ class CollaborativeFiltering:
 
         train_mask = self._get_stratified_tr_mask(user_idx, product_idx, train_size=train_size, random_state=random_state)
 
-        # Create sparse matrices for the training and test sets
         train_matrix, test_matrix = self._make_sparse_tr_te(user_idx, product_idx, interaction, train_mask)
         return train_matrix, test_matrix
 
@@ -84,21 +76,11 @@ class CollaborativeFiltering:
     ) -> Union[None, Tuple[sparse.csr_matrix, sparse.csr_matrix]]:
         """
         Train the ALS model using either a precomputed CSR matrix or an interaction DataFrame.
-
-        Parameters:
-        - interaction_input: Either a CSR matrix or a DataFrame with user and product interactions.
-        - is_csr (bool): Flag indicating if interaction_input is already a CSR matrix.
-        - train_size (float): Train-test split ratio if using a DataFrame as input.
-        - random_state (Optional[int]): Seed for reproducibility.
-
-        Returns:
-        - Tuple of train_matrix and test_matrix if interaction_input is a DataFrame, None otherwise.
         """
         if is_csr:
             if not sparse.isspmatrix_csr(interaction_input):
                 raise ValueError("If is_csr is True, interaction_input must be a CSR sparse matrix.")
             
-            # Fit the model directly on the provided CSR matrix
             train_t = sparse.csr_matrix(interaction_input.T)
             self.model.fit(train_t)
             print("Model training complete with direct CSR matrix.")
@@ -107,10 +89,7 @@ class CollaborativeFiltering:
             if not isinstance(interaction_input, pl.DataFrame):
                 raise ValueError("If is_csr is False, interaction_input must be a polars DataFrame.")
 
-            # Split the DataFrame into train and test CSR matrices
             train_matrix, test_matrix = self.train_test_split(interaction_input, train_size, random_state)
-            
-            # Train on the transposed train matrix
             train_t = sparse.csr_matrix(train_matrix.T)
             self.model.fit(train_t)
             print("Model training complete with generated train matrix from DataFrame.")
@@ -119,36 +98,21 @@ class CollaborativeFiltering:
     def user_recommend(self, user_id, test_matrix, reverse_product_map, user_idx_dict, N=10):
         """
         Generate product recommendations for a specified user.
-
-        Parameters:
-        - user_id (int): The ID of the user for whom to generate recommendations.
-        - test_matrix (csr_matrix): Sparse matrix for test data (item-user format).
-        - reverse_product_map (dict): Dictionary mapping product indices to original product IDs.
-        - user_idx_dict (dict): Dictionary mapping user IDs to user indices.
-        - N (int): Number of recommendations to generate.
-
-        Returns:
-        - List of recommended products with 'product_id' and 'score'.
         """
-        # Step 1: Get the user index (user_idx) from user_id
         try:
             user_idx = user_idx_dict[user_id]
         except KeyError:
             print(f"User ID {user_id} not found in user_idx_dict.")
             return
 
-        # Step 2: Retrieve the user's interaction row and convert to CSR format
         user_interactions = sparse.csr_matrix(test_matrix[user_idx])
 
-        # Step 3: Check if the user has any interactions
         if user_interactions.nnz == 0:
             print(f"No interactions found for user {user_id}.")
             return
 
-        # Step 4: Generate recommendations for the user using model.recommend
         recommended_products, scores = self.model.recommend(user_idx, user_interactions, N=N)
 
-        # Step 5: Map recommended product indices to original product IDs and scores
         recommendations = [
             {'product_id': reverse_product_map.get(idx), 'score': score}
             for idx, score in zip(recommended_products, scores)
@@ -156,3 +120,80 @@ class CollaborativeFiltering:
         ]
 
         return recommendations
+
+    def product_recommend(self, product_id, reverse_product_map, product_id_to_idx, n_similar=10):
+        """
+        Find products similar to the given product ID.
+        
+        Parameters:
+        - product_id: The ID of the product to find similar products for.
+        - reverse_product_map: Dictionary mapping product indices to product IDs.
+        - product_id_to_idx: Dictionary mapping product IDs to product indices.
+        - n_similar: Number of similar products to retrieve (default: 10).
+
+        Returns:
+        - A list of dictionaries with 'product_id' and 'similarity_score' for similar products.
+        """
+        # Step 1: Get the product index using product_id_to_idx
+        product_idx = product_id_to_idx.get(product_id)
+        if product_idx is None:
+            print(f"Product ID {product_id} not found in product_id_to_idx.")
+            return []
+
+        # Step 2: Use the ALS model to find similar items
+        similar_products = self.model.similar_items(product_idx, n_similar)
+        # display(similar_products)
+        product_indices, scores = similar_products
+
+        # Step 4: Create a list to collect similar products
+        similar_products_list = []
+
+        # Step 5: Iterate through the product indices and scores
+        for idx, score in zip(product_indices, scores):
+            original_product_id = reverse_product_map.get(idx)
+
+            # Check if the product index exists in the reverse map
+            if original_product_id is not None:
+                similar_products_list.append({
+                    'product_id': original_product_id,
+                    'similarity_score': score
+                })
+            else:
+                print(f"Product index {idx} not found in reverse_product_map.")
+
+        return similar_products_list
+
+    def recommend(self, user_id, product_id, test_matrix, reverse_product_map, user_idx_dict, product_id_to_idx, N=10):
+        """
+        Combine recommendations from user and product similarity, returning intersection.
+
+        Parameters:
+        - user_id: ID of the user to get recommendations for.
+        - product_id: ID of the product to find similar items.
+        - test_matrix: Sparse matrix in item-user format.
+        - reverse_product_map: Dictionary mapping product indices to product IDs.
+        - user_idx_dict: Dictionary mapping user IDs to user indices.
+        - product_id_to_idx: Dictionary mapping product IDs to product indices.
+        - N: Number of user recommendations to retrieve (default: 10).
+        - n_similar: Number of similar products to retrieve (default: 10).
+
+        Returns:
+        - A list of product recommendations present in both user and product similarity results.
+        """
+        # Step 1: Get recommendations for the user
+        user_recommendations = self.user_recommend(user_id, test_matrix, reverse_product_map, user_idx_dict, N)
+        user_product_ids = {item['product_id'] for item in user_recommendations}
+
+        # Step 2: Get similar products to the specified product
+        product_recommendations = self.product_recommend(product_id, reverse_product_map, product_id_to_idx, N)
+        product_recommend_ids = {item['product_id'] for item in product_recommendations}
+
+        # Step 3: Find the intersection of product IDs
+        common_product_ids = user_product_ids.intersection(product_recommend_ids)
+
+        # Step 4: Filter the intersecting products from user recommendations and return them
+        common_recommendations = [
+            item for item in user_recommendations if item['product_id'] in common_product_ids
+        ]
+
+        return common_recommendations
