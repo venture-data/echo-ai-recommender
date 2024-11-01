@@ -1,5 +1,4 @@
 import implicit
-import pandas as pd
 from scipy import sparse
 
 class CollaborativeFiltering:
@@ -26,10 +25,12 @@ class CollaborativeFiltering:
         - train_matrix (csr_matrix): The user-item interaction matrix (in item-user format).
         """
         # Fit the model on the transpose of the training matrix
-        self.model.fit(train_matrix.T)
+        train_t = sparse.csr_matrix(train_matrix.T)
+        # print("Fitting the model...")
+        self.model.fit(train_t)
         print("Model training complete.")
 
-    def recommend(self, user_id, test_matrix, reverse_product_map, orders_df, N=10):
+    def user_recommend(self, user_id, test_matrix, reverse_product_map, user_idx_dict, N=10):
         """
         Generate product recommendations for a specified user.
 
@@ -45,10 +46,10 @@ class CollaborativeFiltering:
         """
         # Step 1: Get the user index (user_idx) from user_id
         try:
-            user_idx = orders_df.loc[orders_df['user_id'] == user_id, 'user_idx'].values[0]
-        except IndexError:
-            print(f"User ID {user_id} not found in orders_df.")
-            return pd.DataFrame(columns=['product_id', 'score'])
+            user_idx = user_idx_dict[user_id]
+        except KeyError:
+            print(f"User ID {user_id} not found in user_idx_dict.")
+            return
 
         # Step 2: Retrieve the user's interaction row and convert to CSR format
         user_interactions = sparse.csr_matrix(test_matrix[user_idx])
@@ -56,7 +57,7 @@ class CollaborativeFiltering:
         # Step 3: Check if the user has any interactions
         if user_interactions.nnz == 0:
             print(f"No interactions found for user {user_id}.")
-            return pd.DataFrame(columns=['product_id', 'score'])
+            return
 
         # Step 4: Generate recommendations for the user using model.recommend
         recommended_products, scores = self.model.recommend(user_idx, user_interactions, N=N)
@@ -69,6 +70,6 @@ class CollaborativeFiltering:
         ]
 
         # Step 6: Convert the list of recommendations to a DataFrame
-        recommended_products_df = pd.DataFrame(recommendations)
-        
-        return recommended_products_df
+        # recommended_products_df = pd.DataFrame(recommendations)
+
+        return recommendations
