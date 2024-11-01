@@ -6,14 +6,35 @@ from sklearn.utils import check_random_state
 import polars as pl
 
 class CollaborativeFiltering:
-    def __init__(self, factors: int = 2000, regularization: float = 0.1, iterations: int = 20):
+    def __init__(
+        self,
+        factors: int = 2000,
+        regularization: float = 0.1,
+        iterations: int = 20,
+        alpha: int = 1,
+        dtype: type = np.float32,
+        use_native: bool = True,
+        use_cg: bool = True,
+        use_gpu: bool = implicit.gpu.HAS_CUDA,
+        calculate_training_loss: bool = False,
+        num_threads: int = 0,
+        random_state = None
+    ):
         """
-        Initialize the Collaborative Filtering model with ALS.
+        Initialize the Content Based Filtering model with ALS.
         """
         self.model = implicit.als.AlternatingLeastSquares(
             factors=factors,
             regularization=regularization,
-            iterations=iterations
+            iterations=iterations,
+            alpha=alpha,
+            dtype=dtype,
+            use_native=use_native,
+            use_cg=use_cg,
+            use_gpu=use_gpu,
+            calculate_training_loss=calculate_training_loss,
+            num_threads=num_threads,
+            random_state=random_state
         )
 
     @staticmethod
