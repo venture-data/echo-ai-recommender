@@ -134,6 +134,8 @@ class CollaborativeFiltering:
         Returns:
         - A list of dictionaries with 'product_id' and 'similarity_score' for similar products.
         """
+        n_similar = n_similar + 1
+        
         # Step 1: Get the product index using product_id_to_idx
         product_idx = product_id_to_idx.get(product_id)
         if product_idx is None:
@@ -160,7 +162,12 @@ class CollaborativeFiltering:
                 })
             else:
                 print(f"Product index {idx} not found in reverse_product_map.")
-
+        
+        # Step 6: Filter out the original product_id from the list
+        similar_products_list = [
+            item for item in similar_products_list if item['product_id'] != product_id
+        ]
+        
         return similar_products_list
 
     def recommend(self, user_id, product_id, test_matrix, reverse_product_map, user_idx_dict, product_id_to_idx, N=10):
